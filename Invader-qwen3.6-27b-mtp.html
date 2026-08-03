@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>インベーダーゲーム</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+background: #000;
+display: flex;
+justify-content: center;
+align-items: center;
+height: 100vh;
+overflow: hidden;
+font-family: 'Courier New', monospace;
+}
+canvas {
+border: 2px solid #33ff33;
+image-rendering: pixelated;
+}
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// ゲーム設定
+const W = 640, H = 720;
+canvas.width = W;
+canvas.height = H;
+
+// ピクセル描画用ヘルパー
+function drawPixelArt(x, y, pattern, scale, color) {
+    ctx.fillStyle = color || '#fff';
+    for (let row = 0; row < pattern.length; row++) {
+        for (let col = 0; col < pattern[row].length; col++) {
+            if (pattern[row][col]) {
+                ctx.fillRect(
+                    x + col * scale,
+                    y + row * scale,
+                    scale, scale
+                );
+            }
+        }
+    }
+}
+
+// インベーダーのパターン（2フレームずつ）
+const invaderPatterns = [
+    // タイプ1: タコ型 (上段) - フレーム1
+    [
+        [0,0,0,1,1,0,0,0],
+        [0,0,1,1,1,1,0,0],
+        [0,1,1,1,1,1,1,0],
+        [1,1,0,1,1,0,1,1],
+        [1,1,1,1,1,1,1,1],
+        [0,0,1,0,0,1,0,0],
+        [0,1,0,1,1,0,1,0],
+        [1,0,1,0,0,1,0,1]
+    ],
+    // タイプ1: フレーム2
+    [
+        [0,0,0,1,1,0,0,0],
+        [0,0,1,1,1,1,0,0],
+        [0,1,1,1,1,1,1,0],
+        [1,1,0,1,1,0,1,1],
+        [1,1,1,1,1,1,1,1],
+        [0,1,0,0,0,0,1,0],
+        [1,0,0,1,1,0,0,1],
+        [0,1,0,0,0,0,1,0]
+    ],
+    // タイプ2: カニ型 (中段) - フレーム1
+    [
+        [0,1,0,0,0,0,1,0],
+        [0,0,1,0,0,1,0,0],
+        [0,1,1,1,1,1,1,0],
+        [1,1,0,1,1,0,1,1],
+        [1,1,1,1,1,1,1,1],
+        [1,0,1,1,1,1,0,1],
+        [1,0,1,0,0,1,0,1],
+        [0,0,0,1,1,0,0,0]
+    ],
+    // タイプ2: フレーム2
+    [
+        [0,1,0,0,0,0,1,0],
+        [1,0,1,0,0,1,0,1],
+        [1,1,1,1,1,1,1,1],
+        [1,1,0,1,1,0,1,1],
+        [1,1,1,1,1,1,1,1],
+        [0,0,1,0,0,1,0,0],
+        [0,1,0,0,0,0,1,0],
+        [1,0,0,1,1,0,0,1]
+    ],
+    // タイプ3: 烏賊型 (下段) - フレーム1
+    [
+        [0,0,1,1,1,1,0,0],
+        [0,1,1,1,1,1,1,0],
+        [1,1,1,1,1,1,1,1],
+        [1,1,0,1,1,0,1,1],
+        [1,1,1,1,1,1,1,1],
+        [0,0,1,0,0,1,0,0],
+        [0,1,0,1,1,0,1,0],
+        [1,0,1,0,0,1,0,1]
+    ],
+    // タイプ3: フレーム2
+    [
+        [0,0,1,1,1,1,0,0],
+        [0,1,1,1,1,1,1,0],
+        [1,1,1,1,1,1,1,1],
+        [1,1,0,1,1,0,1,1],
+        [1,1,1,1,1,1,1,1],
+        [0,1,0,0,0,0,1,0],
+        [1,0,0,1,1,0,0,1],
+        [0,0,0,0,0,0,0,0]
+    ]
+];
+
+// プレイヤーシップパターン
+const playerPattern = [
+    [0,0,0,0,0,1,0,0,0,0,0],
+  // [0,0,0,0,1,1,1,0,0,0,0],
+    [0,0,0,0,1,1,1,0,0,0,0],
+    [0,0,0,1,1,1,1,1,0,0,0],
+    [0,0,1,1,1,1,1,1,1,0,0],
+    [0,1,1,1,1,1,1,1,1,1,0],
+    [1,1,1,1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1,1,1,1]
+];
+
+// UFOパターン
+const ufoPattern = [
+    [0,0,0,0,0,1,1,1,1,1,0,0,0,0,0],
+    [0,0,0,1,1,1,1,1,1,1,1,1,0,0,0],
+    [0,0,1,1,1,1,1,1,1,1,1,1,1,0,0],
+    [0,1,0,1,0,1,0,1,0,1,0,1,0,1,0],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [0,0,1,1,1,0,0,0,0,0,1,1,1,0,0],
+    [0,0,0,1,0,0,0,0,0,0,0,1,0,0,0]
+];
+
+// シールドパターン
+const shieldPattern = [
+    [0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
+    [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1,1,0,0,0,0,0,0,1,1,1,1,1,1,1]
+];
+
+// ゲーム状態
+let gameState = 'title'; // title, playing, gameover, clear
+let score = 0;
+let highScore = parseInt(localStorage.getItem('invaderHigh') || '0');
+let lives = 3;
+let level = 1;
+let frameCount = 0;
+
+// プレイヤー
+const player = {
+    x: W / 2,
+    y: H - 60,
+    width: 44,
+    height: 28,
+    speed: 5,
+    color: '#33ff33'
+};
+
+// キー状態
+const keys = {};
+
+// インベーダー
+let invaders = [];
+let invaderDirection = 1;
+let invaderSpeed = 0.5;
+let invaderMoveTimer = 0;
+let invaderMoveInterval = 45;
+let invaderFrame = 0;
+let invaderDropAmount = 16;
+
+// 弾
+let playerBullets = [];
+let enemyBullets = [];
+
+// シールド
+let shields = [];
+
+// UFO
+let ufo = null;
+let ufoTimer = 0;
+let ufoInterval = 900;
+
+// パーティクル
+let particles = [];
+
+// サウンド（Web Audio API）
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playSound(freq, duration, type = 'square', volume = 0.1) {
+    try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+    } catch(e) {}
+}
+
+function playShootSound() { playSound(880, 0.1, 'square', 0.08); }
+function playHitSound() { playSound(220, 0.3, 'sawtooth', 0.1); }
+function playExplosionSound() { playSound(80, 0.5, 'sawtooth', 0.15); }
+function playUfoSound() { playSound(440, 0.05, 'sine', 0.06); }
+function playPlayerHitSound() { playSound(120, 0.8, 'sawtooth', 0.2); }
+
+// インベーダー初期化
+function initInvaders() {
+    invaders = [];
+    const rows = 5;
+    const cols = 11;
+    const startX = 60;
+    const startY = 80 + Math.min(level - 1, 5) * 10;
+    const spacingX = 48;
+    const spacingY = 40;
+
+    for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+            let type, points, color;
+            if (row === 0) {
+                type = 2; points = 30; color = '#ff4444';
+            } else if (row <= 2) {
+                type = 1; points = 20; color = '#ffaa00';
+            } else {
+                type = 0; points = 10; color = '#33ff33';
+            }
+            invaders.push({
+                x: startX + col * spacingX,
+                y: startY + row * spacingY,
+                width: 32,
+                height: 24,
+                type: type,
+                points: points,
+                color: color,
+                alive: true
+            });
+        }
+    }
+
+    invaderDirection = 1;
+    invaderSpeed = 0.5 + (level - 1) * 0.2;
+    invaderMoveInterval = Math.max(10, 45 - (level - 1) * 5);
+}
+
+// シールド初期化
+function initShields() {
+    shields = [];
+    const shieldCount = 4;
+    const spacing = W / (shieldCount + 1);
+    for (let i = 0; i < shieldCount; i++) {
+        let sx = spacing * (i + 1) - 42;
+        let sy = H - 160;
+        // シールドのピクセルデータを保持
+        let pixels = [];
+        for (let r = 0; r < shieldPattern.length; r++) {
+            for (let c = 0; c < shieldPattern[r].length; c++) {
+                if (shieldPattern[r][c]) {
+                    pixels.push({ x: sx + c * 3, y: sy + r * 3, alive: true });
+                }
+            }
+        }
+        shields.push(pixels);
+    }
+}
+
+// ゲーム初期化
+function initGame() {
+    score = 0;
+    lives = 3;
+    level = 1;
+    player.x = W / 2;
+    playerBullets = [];
+    enemyBullets = [];
+    particles = [];
+    ufo = null;
+    ufoTimer = 600;
+    initInvaders();
+    initShields();
+}
+
+// レベルアップ
+function nextLevel() {
+    level++;
+    playerBullets = [];
+    enemyBullets = [];
+    particles = [];
+    ufo = null;
+    ufoTimer = 600;
+    initInvaders();
+    // シールドは回復しない（本家仕様）
+}
+
+// パーティクル生成
+function createExplosion(x, y, color, count = 15) {
+    for (let i = 0; i < count; i++) {
+        particles.push({
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * 6,
+            vy: (Math.random() - 0.5) * 6,
+            life: 30 + Math.random() * 20,
+            maxLife: 50,
+            color: color,
+            size: 2 + Math.random() * 3
+        });
+    }
+}
+
+// 衝突判定（矩形）
+function rectCollision(a, b) {
+    return a.x < b.x + b.width &&
+           a.x + a.width > b.x &&
+           a.y < b.y + b.height &&
+           a.y + a.height > b.y;
+}
+
+// シールドとの衝突判定
+function checkShieldCollision(bullet, isPlayerBullet) {
+    for (let shield of shields) {
+        for (let pixel of shield) {
+            if (!pixel.alive) continue;
+            const px = pixel.x;
+            const py = pixel.y;
+            const ps = 3;
+
+            if (bullet.x > px - ps && bullet.x < px + ps * 2 &&
+                bullet.y > py - ps && bullet.y < py + ps * 2) {
+                // 衝突範囲のピクセルを破壊
+                for (let p of shield) {
+                    if (!p.alive) continue;
+                    const dx = Math.abs(p.x - bullet.x);
+                    const dy = Math.abs(p.y - bullet.y);
+                    if (dx < 12 && dy < 12) {
+                        p.alive = false;
+                    }
+                }
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+// インベーダーの移動
+function moveInvaders() {
+    invaderMoveTimer++;
+
+    // 残りのインベーダー数に応じて速度を上げる
+    const aliveCount = invaders.filter(i => i.alive).length;
+    const speedMultiplier = Math.max(1, (55 - aliveCount) / 20);
+    const currentInterval = Math.max(3, invaderMoveInterval / speedMultiplier);
+
+    if (invaderMoveTimer >= currentInterval) {
+        invaderMoveTimer = 0;
+        invaderFrame = 1 - invaderFrame; // アニメーションフレーム切替
+
+        let needDrop = false;
+        const aliveInvaders = invaders.filter(i => i.alive);
+
+        // 端に到達したかチェック
+        for (let inv of aliveInvaders) {
+            if ((inv.x + inv.width >= W - 10 && invaderDirection > 0) ||
+                (inv.x <= 10 && invaderDirection < 0)) {
+                needDrop = true;
+                break;
+            }
+        }
+
+        if (needDrop) {
+            invaderDirection *= -1;
+            for (let inv of aliveInvaders) {
+                inv.y += invaderDropAmount;
+            }
+        } else {
+            const moveAmount = 8 * invaderDirection * speedMultiplier;
+            for (let inv of aliveInvaders) {
+                inv.x += moveAmount;
+            }
+        }
+
+        // インベーダーの移動音
+        playSound(60 + (55 - aliveCount), 0.03, 'square', 0.04);
+    }
+}
+
+// 敵の発射
+function enemyShoot() {
+    const aliveInvaders = invaders.filter(i => i.alive);
+    if (aliveInvaders.length === 0) return;
+
+    // 下段のインベーダーのみが発射可能
+    let bottomByCol = {};
+    for (let inv of aliveInvaders) {
+        const col = Math.round(inv.x / 48);
+        if (!bottomByCol[col] || inv.y > bottomByCol[col].y) {
+            bottomByCol[col] = inv;
+        }
+    }
+
+    const shooters = Object.values(bottomByCol);
+    if (shooters.length === 0) return;
+
+    // レベルに応じて発射頻度を上げる
+    const shootChance = 0.02 + level * 0.005;
+    if (Math.random() < shootChance) {
+        const shooter = shooters[Math.floor(Math.random() * shooters.length)];
+        enemyBullets.push({
+            x: shooter.x + shooter.width / 2 - 2,
+            y: shooter.y + shooter.height,
+            width: 4,
+            height: 12,
+            speed: 3 + level * 0.3
+        });
+    }
+}
+
+// UFO出現
+function updateUfo() {
+    ufoTimer--;
+    if (ufoTimer <= 0 && !ufo) {
+        const dir = Math.random() < 0.5 ? 1 : -1;
+        ufo = {
+            x: dir > 0 ? -60 : W + 10,
+            y: 45,
+            width: 60,
+            height: 21,
+            speed: 2 * dir,
+            points: [50, 100, 150, 300][Math.floor(Math.random() * 4)]
+        };
+        ufoTimer = ufoInterval + Math.random() * 600;
+    }
+
+    if (ufo) {
+        ufo.x += ufo.speed;
+        if (frameCount % 8 === 0) playUfoSound();
+        if (ufo.x < -80 || ufo.x > W + 20) {
+            ufo = null;
+        }
+    }
+}
+
+// プレイヤー更新
+function updatePlayer() {
+    if (keys['ArrowLeft'] || keys['a']) player.x -= player.speed;
+    if (keys['ArrowRight'] || keys['d']) player.x += player.speed;
+
+    // 画面内に収める
+    player.x = Math.max(0, Math.min(W - player.width, player.x));
+
+    // 発射（同時2弾まで）
+    if ((keys[' '] || keys['Space']) && playerBullets.length < 2) {
+        if (!player._shootHeld || frameCount - player._lastShoot > 15) {
+            playerBullets.push({
+                x: player.x + player.width / 2 - 2,
+                y: player.y - 8,
+                width: 4,
+                height: 12,
+                speed: 7
+            });
+            player._lastShoot = frameCount;
+            playShootSound();
+        }
+    }
+
+    if (keys[' '] || keys['Space']) {
+        player._shootHeld = true;
+    } else {
+        player._shootHeld = false;
+    }
+}
+
+// 弾の更新
+function updateBullets() {
+    // プレイヤー弾
+    for (let i = playerBullets.length - 1; i >= 0; i--) {
+        let b = playerBullets[i];
+        b.y -= b.speed;
+
+        if (b.y < 0) {
+            playerBullets.splice(i, 1);
+            continue;
+        }
+
+        // シールドとの衝突
+        if (checkShieldCollision(b, true)) {
+            playerBullets.splice(i, 1);
+            continue;
+        }
+
+        // インベーダーとの衝突
+        let hit = false;
+        for (let inv of invaders) {
+            if (!inv.alive) continue;
+            const invRect = { x: inv.x, y: inv.y, width: inv.width, height: inv.height };
+            if (rectCollision(b, invRect)) {
+                inv.alive = false;
+                score += inv.points;
+                createExplosion(inv.x + inv.width/2, inv.y + inv.height/2, inv.color);
+                playHitSound();
+                playerBullets.splice(i, 1);
+                hit = true;
+                break;
+            }
+        }
+        if (hit) continue;
+
+        // UFOとの衝突
+        if (ufo && rectCollision(b, ufo)) {
+            score += ufo.points;
+            createExplosion(ufo.x + ufo.width/2, ufo.y + ufo.height/2, '#ff00ff', 25);
+            playExplosionSound();
+
+            // スコア表示（浮かぶ）
+            particles.push({
+                x: ufo.x + ufo.width/2,
+                y: ufo.y,
+                vx: 0, vy: -1,
+                life: 60, maxLife: 60,
+                color: '#ff00ff',
+                size: 0,
+                text: String(ufo.points)
+            });
+
+            ufo = null;
+            playerBullets.splice(i, 1);
+        }
+    }
+
+    // 敵弾
+    for (let i = enemyBullets.length - 1; i >= 0; i--) {
+        let b = enemyBullets[i];
+        b.y += b.speed;
+
+        if (b.y > H) {
+            enemyBullets.splice(i, 1);
+            continue;
+        }
+
+        // シールドとの衝突
+        if (checkShieldCollision(b, false)) {
+            enemyBullets.splice(i, 1);
+            continue;
+        }
+
+        // プレイヤーとの衝突
+        const playerRect = { x: player.x, y: player.y, width: player.width, height: player.height };
+        if (rectCollision(b, playerRect)) {
+            enemyBullets.splice(i, 1);
+            lives--;
+            createExplosion(player.x + player.width/2, player.y + player.height/2, '#33ff33', 30);
+            playPlayerHitSound();
+
+            if (lives <= 0) {
+                gameState = 'gameover';
+                if (score > highScore) {
+                    highScore = score;
+                    localStorage.setItem('invaderHigh', String(highScore));
+                }
+            } else {
+                // リセット待ち
+                player.x = W / 2 - player.width / 2;
+            }
+        }
+    }
+}
+
+// パーティクル更新
+function updateParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        if (p.text) {
+            // テキストパーティクル（スコア表示）
+            p.y += p.vy;
+            p.life--;
+        } else {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.1; // グラビティ
+            p.life--;
+        }
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+}
+
+// インベーダーがプレイヤーに到達したか
+function checkInvaderReachedBottom() {
+    for (let inv of invaders) {
+        if (!inv.alive) continue;
+        if (inv.y + inv.height >= player.y - 10) {
+            gameState = 'gameover';
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('invaderHigh', String(highScore));
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+// 全インベーダー撃破チェック
+function checkAllInvadersDestroyed() {
+    const aliveCount = invaders.filter(i => i.alive).length;
+    if (aliveCount === 0) {
+        nextLevel();
+    }
+}
+
+// ===== 描画関数 =====
+
+function drawPlayer() {
+    drawPixelArt(player.x, player.y, playerPattern, 4, player.color);
+}
+
+function drawInvaders() {
+    for (let inv of invaders) {
+        if (!inv.alive) continue;
+        const patternIndex = inv.type * 2 + invaderFrame;
+        const pattern = invaderPatterns[patternIndex];
+        drawPixelArt(inv.x, inv.y, pattern, 4, inv.color);
+    }
+}
+
+function drawBullets() {
+    // プレイヤー弾
+    ctx.fillStyle = '#ffffff';
+    for (let b of playerBullets) {
+        ctx.fillRect(b.x, b.y, b.width, b.height);
+        // グロー効果
+        ctx.shadowColor = '#33ff33';
+        ctx.shadowBlur = 8;
+        ctx.fillRect(b.x, b.y, b.width, b.height);
+        ctx.shadowBlur = 0;
+    }
+
+    // 敵弾
+    ctx.fillStyle = '#ffffff';
+    for (let b of enemyBullets) {
+        // ズギザグした弾の描画
+        const segments = 3;
+        const segH = b.height / segments;
+        for (let s = 0; s < segments; s++) {
+            const offset = (s % 2 === 0) ? -1 : 1;
+            ctx.fillRect(b.x + offset, b.y + s * segH, b.width + 2, segH);
+        }
+    }
+}
+
+function drawShields() {
+    ctx.fillStyle = '#33ff33';
+    for (let shield of shields) {
+        for (let pixel of shield) {
+            if (pixel.alive) {
+                ctx.fillRect(pixel.x, pixel.y, 3, 3);
+            }
+        }
+    }
+}
+
+function drawUfo() {
+    if (!ufo) return;
+    drawPixelArt(ufo.x, ufo.y, ufoPattern, 4, '#ff00ff');
+}
+
+function drawParticles() {
+    for (let p of particles) {
+        const alpha = p.life / p.maxLife;
+        if (p.text) {
+            ctx.fillStyle = `rgba(255, 0, 255, ${alpha})`;
+            ctx.font = 'bold 16px Courier New';
+            ctx.textAlign = 'center';
+            ctx.fillText(p.text, p.x, p.y);
+        } else {
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = alpha;
+            ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
+            ctx.globalAlpha = 1;
+        }
+    }
+}
+
+function drawHUD() {
+    // スコア
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 20px Courier New';
+    ctx.textAlign = 'left';
+    ctx.fillText(`SCORE: ${score}`, 15, 30);
+
+    // ハイスコア
+    ctx.textAlign = 'right';
+    ctx.fillText(`HI: ${highScore}`, W - 15, 30);
+
+    // レベル
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffaa00';
+    ctx.fillText(`LEVEL ${level}`, W / 2, 30);
+
+    // ライフ（シップアイコン）
+    for (let i = 0; i < lives - 1; i++) {
+        drawPixelArt(15 + i * 40, H - 35, playerPattern, 2, '#33ff33');
+    }
+
+    // ライン（床）
+    ctx.strokeStyle = '#33ff33';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, H - 40);
+    ctx.lineTo(W, H - 40);
+    ctx.stroke();
+}
+
+function drawTitle() {
+    // タイトル画面
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+
+    // タイトル
+    ctx.textAlign = 'center';
+
+    // インベーダーを並べてタイトル表示
+    const titleY = 120;
+    for (let i = 0; i < 3; i++) {
+        const patternIndex = i * 2 + Math.floor(frameCount / 30) % 2;
+        drawPixelArt(W/2 - 96, titleY + i * 50, invaderPatterns[patternIndex], 4,
+            ['#ff4444', '#ffaa00', '#33ff33'][i]);
+    }
+
+    ctx.fillStyle = '#33ff33';
+    ctx.font = 'bold 48px Courier New';
+    ctx.fillText('INVADERS', W/2, titleY + 200);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '20px Courier New';
+    ctx.fillText(`HIGH SCORE: ${highScore}`, W/2, titleY + 250);
+
+    // ブリンクするスタートテキスト
+    if (Math.floor(frameCount / 30) % 2 === 0) {
+        ctx.fillStyle = '#ffaa00';
+        ctx.font = 'bold 24px Courier New';
+        ctx.fillText('PRESS ENTER TO START', W/2, titleY + 330);
+    }
+
+    // コントロール説明
+    ctx.fillStyle = '#888';
+    ctx.font = '16px Courier New';
+    ctx.fillText('← → : MOVE    SPACE : FIRE', W/2, titleY + 400);
+
+    // スコア表
+    ctx.fillStyle = '#ff00ff';
+    ctx.font = 'bold 18px Courier New';
+    ctx.fillText('--- POINTS ---', W/2, titleY + 460);
+    ctx.fillStyle = '#ff4444';
+    ctx.fillText('UFO  ??? PTS', W/2, titleY + 490);
+    ctx.fillStyle = '#ffaa00';
+    ctx.fillText('TYPE 1 : 30 PTS', W/2, titleY + 520);
+    ctx.fillStyle = '#33ff33';
+    ctx.fillText('TYPE 2 : 20 PTS', W/2, titleY + 545);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('TYPE 3 : 10 PTS', W/2, titleY + 570);
+}
+
+function drawGameOver() {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ff4444';
+    ctx.font = 'bold 56px Courier New';
+    ctx.fillText('GAME OVER', W/2, H/2 - 40);
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 28px Courier New';
+    ctx.fillText(`SCORE: ${score}`, W/2, H/2 + 20);
+
+    if (score >= highScore && score > 0) {
+        ctx.fillStyle = '#ffaa00';
+        ctx.font = 'bold 24px Courier New';
+        ctx.fillText('★ NEW HIGH SCORE! ★', W/2, H/2 + 60);
+    }
+
+    if (Math.floor(frameCount / 30) % 2 === 0) {
+        ctx.fillStyle = '#33ff33';
+        ctx.font = '20px Courier New';
+        ctx.fillText('PRESS ENTER TO RETRY', W/2, H/2 + 120);
+    }
+}
+
+// ===== メインループ =====
+
+function update() {
+    frameCount++;
+
+    if (gameState === 'title') {
+        if (keys['Enter']) {
+            audioCtx.resume();
+            initGame();
+            gameState = 'playing';
+        }
+        return;
+    }
+
+    if (gameState === 'gameover') {
+        updateParticles();
+        if (keys['Enter'] && frameCount % 30 === 0) {
+            initGame();
+            gameState = 'playing';
+        }
+        return;
+    }
+
+    // playing状態
+    updatePlayer();
+    moveInvaders();
+    enemyShoot();
+    updateBullets();
+    updateUfo();
+    updateParticles();
+    checkInvaderReachedBottom();
+    checkAllInvadersDestroyed();
+}
+
+function draw() {
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+
+    if (gameState === 'title') {
+        drawTitle();
+        return;
+    }
+
+    // ゲーム画面描画
+    drawShields();
+    drawInvaders();
+    drawBullets();
+    drawPlayer();
+    drawUfo();
+    drawParticles();
+    drawHUD();
+
+    if (gameState === 'gameover') {
+        drawGameOver();
+    }
+}
+
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+// キーイベント
+document.addEventListener('keydown', (e) => {
+    keys[e.key] = true;
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' '].includes(e.key)) {
+        e.preventDefault();
+    }
+});
+
+document.addEventListener('keyup', (e) => {
+    keys[e.key] = false;
+});
+
+// ゲーム開始
+gameLoop();
+</script>
+</body>
+</html>
